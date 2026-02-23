@@ -9,8 +9,9 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: "NextField Admin",
+  description:
+    "NextField Admin es un sistema de gestión empresarial desarrollado con Next.js, TypeScript y Supabase que permite administrar empresas, usuarios y suministros con control de acceso basado en roles y arquitectura escalable.",
 };
 
 const geistSans = Geist({
@@ -18,6 +19,8 @@ const geistSans = Geist({
   display: "swap",
   subsets: ["latin"],
 });
+
+import { Toaster } from "@/components/ui/sonner";
 
 export default function RootLayout({
   children,
@@ -34,6 +37,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
