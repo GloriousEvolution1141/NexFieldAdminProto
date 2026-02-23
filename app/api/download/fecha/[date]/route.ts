@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { getExtFromUrl, sanitize } from "@/lib/download-helpers";
+import { getUsuarioById, getSecretariasByAdmin, getTecnicosByCreador, getSuministrosByTecnico, getSuministroById } from "@/lib/queries";
+import { nodeStreamToWebStream } from "@/lib/stream-helpers";
 import JSZip from "jszip";
-
-function getExtFromUrl(url: string): string {
-    const known = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "svg"];
-    const match = url.match(/\.([a-zA-Z0-9]+)(\?|$)/);
-    const candidate = match?.[1]?.toLowerCase();
-    return candidate && known.includes(candidate) ? candidate : "jpg";
-}
-
-function sanitize(name: string): string {
-    return name.replace(/[/\\:*?"<>|]/g, "_").replace(/\s+/g, " ").trim();
-}
 
 export async function GET(
     request: NextRequest,
@@ -32,22 +24,12 @@ export async function GET(
     }
 
     const userId = userData.user.id;
-    const startOfDay = `${date}T00:00:00.000Z`;
-    const endOfDay = `${date}T23:59:59.999Z`;
 
     // ── 2. Admin client (bypasses RLS) — auth was already verified ──
-    const supabaseAdmin = createAdminClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    const supabaseAdmin = getAdminClient();
 
     // ── 3. Get logged-in user info ──
-    const { data: authUser } = await supabaseAdmin
-        .from("usuario")
-        .select("rol_id, nombres, apellidos")
-        .eq("id", userId)
-        .single();
+    const { data: authUser } = await getUsuarioById(supabaseAdmin, userId);
 
     if (!authUser) {
         return NextResponse.json({ error: "Usuario no encontrado en la base de datos." }, { status: 401 });
@@ -63,11 +45,7 @@ export async function GET(
 
     if (role === "2") {
         // Secretaria: get all her tecnicos
-        const { data: tecnicos } = await supabaseAdmin
-            .from("usuario")
-            .select("id, nombres, apellidos")
-            .eq("creadoPor", userId)
-            .eq("rol_id", 3);
+        const { data: tecnicos } = await getTecnicosByCreador(supabaseAdmin, userId);
 
         secretariaMap.set(userId, {
             name: userName,
@@ -78,18 +56,10 @@ export async function GET(
         });
     } else if (role === "1") {
         // Admin: get all secretarias and all their tecnicos
-        const { data: secretarias } = await supabaseAdmin
-            .from("usuario")
-            .select("id, nombres, apellidos")
-            .eq("creadoPor", userId)
-            .eq("rol_id", 2);
+        const { data: secretarias } = await getSecretariasByAdmin(supabaseAdmin, userId);
 
         for (const sec of secretarias ?? []) {
-            const { data: tecnicos } = await supabaseAdmin
-                .from("usuario")
-                .select("id, nombres, apellidos")
-                .eq("creadoPor", sec.id)
-                .eq("rol_id", 3);
+            const { data: tecnicos } = await getTecnicosByCreador(supabaseAdmin, sec.id);
 
             secretariaMap.set(sec.id, {
                 name: sanitize(`${sec.nombres} ${sec.apellidos}`),
@@ -105,36 +75,29 @@ export async function GET(
         return NextResponse.json({ error: "No hay secretarias asociadas a tu cuenta." }, { status: 404 });
     }
 
-    // ── 5. Build ZIP with full hierarchy, then fill with date-filtered suministros ──
+    // ── 5. Build ZIP stream with full hierarchy ──
     const zip = new JSZip();
     const allErrors: string[] = [];
-    let totalAdded = 0;
 
-    // Helper: fetch suministros for a tecnico on the given date and add to folder
+    // Helper: fetch suministros for a tecnico and attach photos to the folder
     async function addTecnicoContent(tecFolder: JSZip, tecnicoId: string, pathPrefix: string) {
         // Get ALL suministros for this tecnico
-        const { data: suministros } = await supabaseAdmin
-            .from("suministro")
-            .select("id, nombre")
-            .eq("asignado_a", tecnicoId)
-            .order("nombre", { ascending: true });
+        const { data: suministros } = await getSuministrosByTecnico(supabaseAdmin, tecnicoId);
 
         if (!suministros || suministros.length === 0) return;
 
-        for (const suministro of suministros) {
+        // Process all suministros in parallel
+        await Promise.all(suministros.map(async (suministro: any) => {
             const suministroFolderName = sanitize(suministro.nombre) || `suministro_${suministro.id.slice(0, 8)}`;
             const suministroFolder = tecFolder.folder(suministroFolderName)!;
 
             // Get photos for this suministro
-            const { data: conFotos } = await supabaseAdmin
-                .from("suministro")
-                .select(`id, nombre, fotos:fotos( id, nombre, direccion )`)
-                .eq("id", suministro.id)
-                .single();
+            const { data: conFotos } = await getSuministroById(supabaseAdmin, suministro.id);
 
             const fotos = Array.isArray(conFotos?.fotos) ? conFotos.fotos : [];
-            if (fotos.length === 0) continue;
+            if (fotos.length === 0) return;
 
+            // Process all fotos in parallel
             await Promise.all(
                 fotos.map(async (foto: any, index: number) => {
                     if (!foto.direccion) return;
@@ -148,14 +111,16 @@ export async function GET(
                         const ext = getExtFromUrl(foto.direccion);
                         const name = sanitize(foto.nombre || `foto_${index + 1}`);
                         suministroFolder.file(`${String(index + 1).padStart(2, "0")}_${name}.${ext}`, buffer);
-                        totalAdded++;
                     } catch (err: any) {
                         allErrors.push(`${pathPrefix}/${suministroFolderName} foto ${index + 1}: ${err.message}`);
                     }
                 })
             );
-        }
+        }));
     }
+
+    // Load structure concurrently
+    const preparationPromises: Promise<void>[] = [];
 
     if (role === "1") {
         // ── ADMIN: admin_name / fecha / secretaria / tecnico / suministro / fotos ──
@@ -166,7 +131,7 @@ export async function GET(
             const secFolder = dateFolder.folder(secInfo.name)!;
             for (const tec of secInfo.tecnicos) {
                 const tecFolder = secFolder.folder(tec.name)!;
-                await addTecnicoContent(tecFolder, tec.id, `${secInfo.name}/${tec.name}`);
+                preparationPromises.push(addTecnicoContent(tecFolder, tec.id, `${secInfo.name}/${tec.name}`));
             }
         }
     } else {
@@ -177,21 +142,25 @@ export async function GET(
         for (const [, secInfo] of secretariaMap) {
             for (const tec of secInfo.tecnicos) {
                 const tecFolder = dateFolder.folder(tec.name)!;
-                await addTecnicoContent(tecFolder, tec.id, `${tec.name}`);
+                preparationPromises.push(addTecnicoContent(tecFolder, tec.id, `${tec.name}`));
             }
         }
     }
 
-    const zipFileName = `${userName} - ${date}.zip`;
-    const zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
-    const body = new Uint8Array(zipBuffer);
+    // Wait for all fetches and file attachments to finish
+    await Promise.all(preparationPromises);
 
-    return new NextResponse(body, {
+    const zipFileName = `${userName} - ${date}.zip`;
+    
+    // Instead of buffer -> Uint8Array, we generate a node stream and convert it to a web stream.
+    const nodeStream = zip.generateNodeStream({ type: "nodebuffer", streamFiles: true, compression: "DEFLATE" });
+    const stream = nodeStreamToWebStream(nodeStream);
+
+    return new NextResponse(stream as unknown as BodyInit, {
         status: 200,
         headers: {
             "Content-Type": "application/zip",
             "Content-Disposition": `attachment; filename="${zipFileName}"`,
-            "Content-Length": body.byteLength.toString(),
         },
     });
 }

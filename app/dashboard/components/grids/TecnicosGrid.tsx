@@ -7,6 +7,7 @@ import { DownloadTecnicoButton } from "@/app/dashboard/components/DownloadTecnic
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HardHat, Calendar, Wrench } from "lucide-react";
+import { formatDateToLima } from "@/lib/date-helpers";
 
 interface Tecnico {
   id: string;
@@ -81,12 +82,7 @@ export function TecnicosGrid({
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5" />
-                  <span>
-                    {new Date(tk.created_at || new Date()).toLocaleDateString(
-                      "es-ES",
-                      { dateStyle: "medium" },
-                    )}
-                  </span>
+                  <span>{formatDateToLima(tk.created_at)}</span>
                 </div>
                 <DownloadTecnicoButton
                   tecnicoId={tk.id}

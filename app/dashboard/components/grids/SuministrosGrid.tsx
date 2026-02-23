@@ -27,16 +27,10 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import {
-  Eye,
-  Maximize2,
-  Package,
-  Calendar,
-  Trash2,
-  CheckSquare,
-} from "lucide-react";
+import { Eye, Package, Calendar, Trash2, CheckSquare } from "lucide-react";
 import { deleteMultipleSuministros } from "@/app/dashboard/actions/deleteSuministro";
 import { toast } from "sonner";
+import { formatDateToLima, formatDateTimeToLima } from "@/lib/date-helpers";
 
 interface Foto {
   id: string;
@@ -167,9 +161,9 @@ export function SuministrosGrid({
         )}
       </div>
 
-      {/* Confirm bulk delete — usa Dialog normal para poder cerrarse al hacer click fuera */}
+      {/* Confirm bulk delete */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg bg-slate-200">
           <DialogHeader>
             <DialogTitle>
               ¿Eliminar {selected.size} suministro
@@ -217,7 +211,6 @@ function SuministroCard({
   onToggle: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  // Estado separado para el maximizador — se renderiza fuera del DialogContent con overflow
   const [maxFoto, setMaxFoto] = useState<Foto | null>(null);
 
   return (
@@ -247,12 +240,7 @@ function SuministroCard({
         <CardContent className="pb-2 flex-1 space-y-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Calendar className="h-3.5 w-3.5" />
-            <span>
-              {new Date(s.created_at || new Date()).toLocaleDateString(
-                "es-ES",
-                { dateStyle: "medium" },
-              )}
-            </span>
+            <span>{formatDateToLima(s.created_at)}</span>
           </div>
           <p className="text-xs text-muted-foreground">
             {fotoCount} foto{fotoCount !== 1 ? "s" : ""}
@@ -283,7 +271,7 @@ function SuministroCard({
 
       {/* Dialog de fotos */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-200">
           <DialogHeader>
             <DialogTitle>Fotos de {s.nombre}</DialogTitle>
           </DialogHeader>
@@ -293,13 +281,13 @@ function SuministroCard({
                 Este suministro no tiene fotos registradas.
               </p>
             ) : (
-              <Carousel className="w-full max-w-3xl mx-auto">
+              <Carousel className="w-full max-w-3xl mx-auto bg-slate-100 rounded-md">
                 <CarouselContent>
                   {s.fotos.map((f) => (
                     <CarouselItem key={f.id}>
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 rounded-lg border p-4 bg-muted/30">
-                        <div className="flex flex-col gap-2 h-[350px] lg:col-span-2">
-                          <span className="font-semibold text-lg truncate">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 rounded-md border p-4 bg-muted/30">
+                        <div className="flex flex-col gap-2 h-[350px] lg:col-span-2 ">
+                          <span className="font-semibold text-lg truncate ">
                             {f.nombre || "Sin Título"}
                           </span>
                           <div className="w-full h-full bg-muted-foreground/10 rounded-md overflow-hidden flex items-center justify-center relative">
@@ -309,17 +297,10 @@ function SuministroCard({
                                 <img
                                   src={f.direccion}
                                   alt={f.nombre || "Foto"}
-                                  className="absolute inset-0 w-full h-full object-contain bg-black/5"
-                                />
-                                {/* Botón maximizar — abre el dialog fuera del overflow */}
-                                <Button
-                                  variant="secondary"
-                                  size="icon"
-                                  className="absolute top-2 right-2 z-20 bg-background/80 hover:bg-background backdrop-blur"
+                                  className="absolute inset-0 w-full h-full object-contain bg-black/5 cursor-pointer hover:opacity-80  transition-opacity"
                                   onClick={() => setMaxFoto(f)}
-                                >
-                                  <Maximize2 className="h-4 w-4" />
-                                </Button>
+                                  title="Clic para maximizar"
+                                />
                               </>
                             ) : (
                               <span className="text-xs text-muted-foreground">
@@ -328,12 +309,7 @@ function SuministroCard({
                             )}
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(
-                              f.created_at || new Date(),
-                            ).toLocaleString("es-ES", {
-                              dateStyle: "long",
-                              timeStyle: "short",
-                            })}
+                            {formatDateTimeToLima(f.created_at)}
                           </span>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -356,8 +332,7 @@ function SuministroCard({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de maximizar — renderizado FUERA del DialogContent con overflow
-                para que el portal se posicione correctamente en el viewport (centro) */}
+      {/* Dialog de maximizar */}
       <Dialog
         open={!!maxFoto}
         onOpenChange={(v) => {

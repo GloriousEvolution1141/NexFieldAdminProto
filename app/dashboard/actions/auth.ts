@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Creates a user via the Supabase Admin API.
@@ -9,16 +9,7 @@ import { createClient } from "@supabase/supabase-js";
  */
 export async function createUsuarioAuthAdmin(email: string, password?: string) {
     // We need the service role key to bypass RLS and Auth rules
-    const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false,
-            },
-        }
-    );
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email,
