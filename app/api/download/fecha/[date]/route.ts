@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import JSZip from "jszip";
 
 function getExtFromUrl(url: string): string {
@@ -20,6 +21,7 @@ export async function GET(
     const { date } = await params;
     const supabase = await createClient();
 
+    // ── 1. Auth check ──
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user) {
         return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -33,7 +35,15 @@ export async function GET(
     const startOfDay = `${date}T00:00:00.000Z`;
     const endOfDay = `${date}T23:59:59.999Z`;
 
-    const { data: authUser } = await supabase
+    // ── 2. Admin client (bypasses RLS) — auth was already verified ──
+    const supabaseAdmin = createAdminClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    // ── 3. Get logged-in user info ──
+    const { data: authUser } = await supabaseAdmin
         .from("usuario")
         .select("rol_id, nombres, apellidos")
         .eq("id", userId)
@@ -44,38 +54,49 @@ export async function GET(
     }
 
     const role = authUser.rol_id?.toString();
+    const userName = sanitize(`${authUser.nombres} ${authUser.apellidos}`);
 
-    // Build a map of secretariaId → { name, tecnicoIds[] }
-    // This gives us the secretaria→tecnico hierarchy for the ZIP structure.
-    type SecretariaGroup = { name: string; tecnicoIds: string[] };
-    const secretariaMap = new Map<string, SecretariaGroup>();
+    // ── 4. Build full hierarchy: secretarias → tecnicos (with names) ──
+    type TecnicoInfo = { id: string; name: string };
+    type SecretariaInfo = { name: string; tecnicos: TecnicoInfo[] };
+    const secretariaMap = new Map<string, SecretariaInfo>();
 
     if (role === "2") {
-        // Logged-in user IS the secretaria
-        const secName = sanitize(`${authUser.nombres} ${authUser.apellidos}`);
-        const { data: tecnicos } = await supabase
+        // Secretaria: get all her tecnicos
+        const { data: tecnicos } = await supabaseAdmin
             .from("usuario")
-            .select("id")
+            .select("id, nombres, apellidos")
             .eq("creadoPor", userId)
             .eq("rol_id", 3);
-        secretariaMap.set(userId, { name: secName, tecnicoIds: (tecnicos ?? []).map((t: any) => t.id) });
+
+        secretariaMap.set(userId, {
+            name: userName,
+            tecnicos: (tecnicos ?? []).map((t: any) => ({
+                id: t.id,
+                name: sanitize(`${t.nombres} ${t.apellidos}`),
+            })),
+        });
     } else if (role === "1") {
-        // Admin: get all secretarias and their technicians
-        const { data: secretarias } = await supabase
+        // Admin: get all secretarias and all their tecnicos
+        const { data: secretarias } = await supabaseAdmin
             .from("usuario")
             .select("id, nombres, apellidos")
             .eq("creadoPor", userId)
             .eq("rol_id", 2);
 
         for (const sec of secretarias ?? []) {
-            const { data: tecnicos } = await supabase
+            const { data: tecnicos } = await supabaseAdmin
                 .from("usuario")
-                .select("id")
+                .select("id, nombres, apellidos")
                 .eq("creadoPor", sec.id)
                 .eq("rol_id", 3);
+
             secretariaMap.set(sec.id, {
                 name: sanitize(`${sec.nombres} ${sec.apellidos}`),
-                tecnicoIds: (tecnicos ?? []).map((t: any) => t.id),
+                tecnicos: (tecnicos ?? []).map((t: any) => ({
+                    id: t.id,
+                    name: sanitize(`${t.nombres} ${t.apellidos}`),
+                })),
             });
         }
     }
@@ -84,108 +105,84 @@ export async function GET(
         return NextResponse.json({ error: "No hay secretarias asociadas a tu cuenta." }, { status: 404 });
     }
 
-    const allTecnicoIds = [...secretariaMap.values()].flatMap((s) => s.tecnicoIds);
-    if (allTecnicoIds.length === 0) {
-        return NextResponse.json({ error: "No hay técnicos asociados." }, { status: 404 });
-    }
-
-    // Get suministros from those technicians on the given date, joining the technician
-    const { data: suministros, error } = await supabase
-        .from("suministro")
-        .select(`
-      id, nombre, asignado_a,
-      tecnico:usuario!suministro_asignado_a_fkey( id, nombres, apellidos, creadoPor )
-    `)
-        .in("asignado_a", allTecnicoIds)
-        .gte("created_at", startOfDay)
-        .lte("created_at", endOfDay)
-        .order("nombre", { ascending: true });
-
-    if (error || !suministros || suministros.length === 0) {
-        return NextResponse.json({ error: `No hay suministros registrados el ${date}.` }, { status: 404 });
-    }
-
-    // Build reverse map: tecnicoId → secretariaId
-    const tecnicoToSecretaria = new Map<string, string>();
-    for (const [secId, group] of secretariaMap) {
-        for (const tId of group.tecnicoIds) tecnicoToSecretaria.set(tId, secId);
-    }
-
+    // ── 5. Build ZIP with full hierarchy, then fill with date-filtered suministros ──
     const zip = new JSZip();
-    const dateFolder = zip.folder(date)!;
-    let totalAdded = 0;
     const allErrors: string[] = [];
+    let totalAdded = 0;
 
-    // Group: secretaria → tecnico → [suministros]
-    type TecnicoGroup = { name: string; suministros: typeof suministros };
-    const hierarchy = new Map<string, { secName: string; tecnicos: Map<string, TecnicoGroup> }>();
+    // Helper: fetch suministros for a tecnico on the given date and add to folder
+    async function addTecnicoContent(tecFolder: JSZip, tecnicoId: string, pathPrefix: string) {
+        // Get ALL suministros for this tecnico
+        const { data: suministros } = await supabaseAdmin
+            .from("suministro")
+            .select("id, nombre")
+            .eq("asignado_a", tecnicoId)
+            .order("nombre", { ascending: true });
 
-    for (const s of suministros) {
-        const tec = s.tecnico as any;
-        const tecId = s.asignado_a || "unknown";
-        const secId = tecnicoToSecretaria.get(tecId) || "unknown";
-        const secName = secretariaMap.get(secId)?.name || "Sin_Secretaria";
-        const tecName = tec ? sanitize(`${tec.nombres} ${tec.apellidos}`) : "Sin_Técnico";
+        if (!suministros || suministros.length === 0) return;
 
-        if (!hierarchy.has(secId)) {
-            hierarchy.set(secId, { secName, tecnicos: new Map() });
+        for (const suministro of suministros) {
+            const suministroFolderName = sanitize(suministro.nombre) || `suministro_${suministro.id.slice(0, 8)}`;
+            const suministroFolder = tecFolder.folder(suministroFolderName)!;
+
+            // Get photos for this suministro
+            const { data: conFotos } = await supabaseAdmin
+                .from("suministro")
+                .select(`id, nombre, fotos:fotos( id, nombre, direccion )`)
+                .eq("id", suministro.id)
+                .single();
+
+            const fotos = Array.isArray(conFotos?.fotos) ? conFotos.fotos : [];
+            if (fotos.length === 0) continue;
+
+            await Promise.all(
+                fotos.map(async (foto: any, index: number) => {
+                    if (!foto.direccion) return;
+                    try {
+                        const res = await fetch(foto.direccion);
+                        if (!res.ok) {
+                            allErrors.push(`${pathPrefix}/${suministroFolderName} foto ${index + 1}: HTTP ${res.status}`);
+                            return;
+                        }
+                        const buffer = await res.arrayBuffer();
+                        const ext = getExtFromUrl(foto.direccion);
+                        const name = sanitize(foto.nombre || `foto_${index + 1}`);
+                        suministroFolder.file(`${String(index + 1).padStart(2, "0")}_${name}.${ext}`, buffer);
+                        totalAdded++;
+                    } catch (err: any) {
+                        allErrors.push(`${pathPrefix}/${suministroFolderName} foto ${index + 1}: ${err.message}`);
+                    }
+                })
+            );
         }
-        const secGroup = hierarchy.get(secId)!;
-        if (!secGroup.tecnicos.has(tecId)) {
-            secGroup.tecnicos.set(tecId, { name: tecName, suministros: [] });
-        }
-        secGroup.tecnicos.get(tecId)!.suministros.push(s);
     }
 
-    for (const [, secGroup] of hierarchy) {
-        const secFolder = dateFolder.folder(secGroup.secName)!;
+    if (role === "1") {
+        // ── ADMIN: admin_name / fecha / secretaria / tecnico / suministro / fotos ──
+        const rootFolder = zip.folder(userName)!;
+        const dateFolder = rootFolder.folder(date)!;
 
-        for (const [, tecGroup] of secGroup.tecnicos) {
-            const tecFolder = secFolder.folder(tecGroup.name)!;
+        for (const [, secInfo] of secretariaMap) {
+            const secFolder = dateFolder.folder(secInfo.name)!;
+            for (const tec of secInfo.tecnicos) {
+                const tecFolder = secFolder.folder(tec.name)!;
+                await addTecnicoContent(tecFolder, tec.id, `${secInfo.name}/${tec.name}`);
+            }
+        }
+    } else {
+        // ── SECRETARIA (role 2): secretaria_name / fecha / tecnico / suministro / fotos ──
+        const rootFolder = zip.folder(userName)!;
+        const dateFolder = rootFolder.folder(date)!;
 
-            for (const suministro of tecGroup.suministros) {
-                const { data: conFotos } = await supabase
-                    .from("suministro")
-                    .select(`id, nombre, fotos:fotos( id, nombre, direccion )`)
-                    .eq("id", suministro.id)
-                    .single();
-
-                const fotos = Array.isArray(conFotos?.fotos) ? conFotos.fotos : [];
-                if (fotos.length === 0) continue;
-
-                const suministroFolderName = sanitize(suministro.nombre) || `suministro_${suministro.id.slice(0, 8)}`;
-                const suministroFolder = tecFolder.folder(suministroFolderName)!;
-
-                await Promise.all(
-                    fotos.map(async (foto: any, index: number) => {
-                        if (!foto.direccion) return;
-                        try {
-                            const res = await fetch(foto.direccion);
-                            if (!res.ok) {
-                                allErrors.push(`${secGroup.secName}/${tecGroup.name}/${suministroFolderName} foto ${index + 1}: HTTP ${res.status}`);
-                                return;
-                            }
-                            const buffer = await res.arrayBuffer();
-                            const ext = getExtFromUrl(foto.direccion);
-                            const name = sanitize(foto.nombre || `foto_${index + 1}`);
-                            suministroFolder.file(`${String(index + 1).padStart(2, "0")}_${name}.${ext}`, buffer);
-                            totalAdded++;
-                        } catch (err: any) {
-                            allErrors.push(`${secGroup.secName}/${tecGroup.name}/${suministroFolderName} foto ${index + 1}: ${err.message}`);
-                        }
-                    })
-                );
+        for (const [, secInfo] of secretariaMap) {
+            for (const tec of secInfo.tecnicos) {
+                const tecFolder = dateFolder.folder(tec.name)!;
+                await addTecnicoContent(tecFolder, tec.id, `${tec.name}`);
             }
         }
     }
 
-    if (totalAdded === 0) {
-        return NextResponse.json(
-            { error: `No se pudo descargar ninguna foto. ${allErrors.join("; ")}` },
-            { status: 500 }
-        );
-    }
-
+    const zipFileName = `${userName} - ${date}.zip`;
     const zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     const body = new Uint8Array(zipBuffer);
 
@@ -193,7 +190,7 @@ export async function GET(
         status: 200,
         headers: {
             "Content-Type": "application/zip",
-            "Content-Disposition": `attachment; filename="${date}.zip"`,
+            "Content-Disposition": `attachment; filename="${zipFileName}"`,
             "Content-Length": body.byteLength.toString(),
         },
     });
