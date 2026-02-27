@@ -5,6 +5,7 @@ import { Plus, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ export function CreateSuministroDialog({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -85,7 +87,7 @@ export function CreateSuministroDialog({
         description: `Se asignaron ${arrayNombres.length} equipo(s) exitosamente.`,
       });
       setIsOpen(false);
-      window.location.reload();
+      router.refresh();
     }
   }
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect } from "react";
+
 import { useSearch } from "@/app/dashboard/components/SearchContext";
-import { CreateSuministroDialog } from "@/app/dashboard/components/CreateSuministroDialog";
+import { useSuministrosContext } from "./SuministrosContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +28,15 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { Eye, Package, Calendar, Trash2, CheckSquare } from "lucide-react";
-import { deleteMultipleSuministros } from "@/app/dashboard/actions/deleteSuministro";
+import {
+  Eye,
+  Package,
+  Calendar,
+  Trash2,
+  CheckSquare,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { formatDateToLima, formatDateTimeToLima } from "@/lib/date-helpers";
 
@@ -42,6 +50,7 @@ interface Foto {
 interface Suministro {
   id: string;
   nombre: string;
+  estado: string | null;
   activo: boolean | null;
   created_at: string | null;
   fotos: Foto[];
@@ -57,13 +66,22 @@ export function SuministrosGrid({
   tecnicoId: string;
 }) {
   const { query: q } = useSearch();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const { selected, setSelected, setSuministros, animationKey } =
+    useSuministrosContext();
+  const [itemsToShow, setItemsToShow] = useState(12);
+
+  // Sync the server-fetched data into the shared context so the header knows about it
+  useEffect(() => {
+    setSuministros(suministros);
+  }, [suministros, setSuministros]);
 
   const filtered = q
-    ? suministros.filter((s) => s.nombre.toLowerCase().includes(q))
+    ? suministros.filter((s) =>
+        s.nombre.toLowerCase().includes(q.toLowerCase()),
+      )
     : suministros;
+
+  const displayedItems = filtered.slice(0, itemsToShow);
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -74,74 +92,23 @@ export function SuministrosGrid({
     });
   }
 
-  function handleBulkDelete() {
-    startTransition(async () => {
-      const ids = Array.from(selected);
-      const result = await deleteMultipleSuministros(ids);
-      if (result?.error) {
-        toast.error("Error al eliminar", { description: result.error });
-      } else {
-        toast.success(
-          `${ids.length} suministro${ids.length !== 1 ? "s" : ""} eliminado${ids.length !== 1 ? "s" : ""} correctamente.`,
-          { duration: 2500 },
-        );
-        setSelected(new Set());
-      }
-      setConfirmOpen(false);
-    });
+  // If no items match search but there are items overall
+  if (filtered.length === 0 && suministros.length > 0) {
+    return (
+      <div className="text-center py-10 text-slate-500">
+        No se encontraron elementos para "{q}".
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Suministros</h2>
-          <p className="text-muted-foreground w-full max-w-2xl mt-1 text-sm">
-            Listado de suministros asignados a este técnico.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 w-48"
-            onClick={() => {
-              if (selected.size === filtered.length) {
-                setSelected(new Set());
-              } else {
-                setSelected(new Set(filtered.map((s) => s.id)));
-              }
-            }}
-          >
-            <CheckSquare className="h-4 w-4" />
-            {selected.size === filtered.length
-              ? "Deseleccionar todos"
-              : "Seleccionar todos"}
-          </Button>
-
-          <Button
-            variant="destructive"
-            size="sm"
-            className="gap-2 w-32"
-            onClick={() => setConfirmOpen(true)}
-            disabled={selected.size === 0 || isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-            Eliminar {selected.size}
-          </Button>
-        </div>
-      </div>
-
       {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <CreateSuministroDialog
-          adminOrSecretariaId={userId}
-          tecnicoId={tecnicoId}
-          asCard
-        />
-
-        {filtered.map((s) => {
+      <div
+        key={animationKey}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"
+      >
+        {displayedItems.map((s, index) => {
           const fotoCount = Array.isArray(s.fotos) ? s.fotos.length : 0;
           return (
             <SuministroCard
@@ -150,6 +117,7 @@ export function SuministrosGrid({
               fotoCount={fotoCount}
               isSelected={selected.has(s.id)}
               onToggle={() => toggleSelect(s.id)}
+              index={index}
             />
           );
         })}
@@ -161,40 +129,17 @@ export function SuministrosGrid({
         )}
       </div>
 
-      {/* Confirm bulk delete */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-lg bg-slate-200">
-          <DialogHeader>
-            <DialogTitle>
-              ¿Eliminar {selected.size} suministro
-              {selected.size !== 1 ? "s" : ""}?
-            </DialogTitle>
-            <DialogDescription>
-              Esta acción eliminará{" "}
-              <strong>
-                {selected.size} suministro{selected.size !== 1 ? "s" : ""}
-              </strong>{" "}
-              y todas sus fotos de forma permanente. No se puede deshacer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-              disabled={isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleBulkDelete}
-              disabled={isPending}
-            >
-              {isPending ? "Eliminando..." : "Sí, eliminar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {itemsToShow < filtered.length && (
+        <div className="flex justify-center pt-4">
+          <Button
+            variant="outline"
+            onClick={() => setItemsToShow((prev) => prev + 12)}
+            className="w-full max-w-xs"
+          >
+            Ver más suministros
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -204,67 +149,145 @@ function SuministroCard({
   fotoCount,
   isSelected,
   onToggle,
+  index = 0,
 }: {
   s: Suministro;
   fotoCount: number;
   isSelected: boolean;
   onToggle: () => void;
+  index?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [maxFoto, setMaxFoto] = useState<Foto | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  async function handleDownload(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (fotoCount === 0) {
+      toast.warning("Sin fotos", {
+        description: "Este suministro no tiene fotos para descargar.",
+      });
+      return;
+    }
+
+    setIsDownloading(true);
+    toast.info("Preparando descarga...", {
+      description: `Empaquetando fotos de "${s.nombre}"`,
+    });
+
+    try {
+      const response = await fetch(`/api/download/suministro/${s.id}`);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Error al descargar");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${s.nombre}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success("Descarga lista", {
+        description: `"${s.nombre}.zip" descargado correctamente.`,
+        duration: 2000,
+      });
+    } catch (error: any) {
+      toast.error("Error en la descarga", { description: error.message });
+    } finally {
+      setIsDownloading(false);
+    }
+  }
 
   return (
     <>
-      <Card className="h-full flex flex-col hover:shadow-lg transition-all">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
+      <Card
+        className="h-full flex flex-col bg-white shadow-sm border border-slate-200 rounded-xl hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-4 duration-500"
+        style={{
+          animationDelay: `${index * 50}ms`,
+          animationFillMode: "backwards",
+        }}
+      >
+        <CardHeader className="pb-2 pt-5 px-5">
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-[11px] font-semibold text-slate-400 tracking-wider">
+              #{String(s.id).slice(0, 8).toUpperCase()}
+            </span>
             <Badge
               variant="outline"
               className={
-                s.activo
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                  : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400"
+                s.estado?.toLowerCase() === "completado"
+                  ? "bg-emerald-50 text-emerald-600 border-transparent rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+                  : "bg-amber-50 text-amber-600 border-transparent rounded-full px-2.5 py-0.5 text-[11px] font-medium"
               }
             >
-              {s.activo ? "Activo" : "Inactivo"}
+              {s.estado?.toLowerCase() === "completado"
+                ? "Completado"
+                : "Pendiente"}
             </Badge>
           </div>
-          <CardTitle className="text-sm mt-3 leading-snug line-clamp-2">
+          <CardTitle className="text-base font-bold text-slate-900 leading-snug line-clamp-2">
             {s.nombre}
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="pb-2 flex-1 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
+        <CardContent className="pb-4 px-5 flex-1 space-y-2.5">
+          <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
+            <Package className="h-3.5 w-3.5 text-slate-400" />
+            <span>
+              {fotoCount} foto{fotoCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
             <span>{formatDateToLima(s.created_at)}</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {fotoCount} foto{fotoCount !== 1 ? "s" : ""}
-          </p>
         </CardContent>
 
-        <CardFooter className="pt-2 pb-4 flex items-center justify-between gap-2 border-t">
+        <CardFooter className="pt-4 pb-5 px-5 flex items-center gap-2 border-t border-slate-100">
           <Button
             size="sm"
-            variant={isSelected ? "destructive" : "outline"}
-            className="w-16 h-8 p-0"
+            variant="ghost"
+            className={`w-10 h-9 p-0 shrink-0 transition-colors border  ${
+              isSelected
+                ? "bg-red-50 text-red-600 hover:bg-red-100"
+                : "text-slate-400 hover:bg-red-50 hover:text-red-600"
+            }`}
             onClick={onToggle}
             title={isSelected ? "Deseleccionar" : "Seleccionar"}
           >
             <CheckSquare className="h-4 w-4" />
           </Button>
+
           <Button
             size="sm"
-            variant="outline"
-            className="gap-1.5"
+            variant="ghost"
+            className="flex-1 h-9 p-0 border text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
             onClick={() => setOpen(true)}
+            title="Ver Detalles"
           >
-            <Eye className="h-3.5 w-3.5" />
-            Ver
+            <Eye className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="w-10 h-9 p-0 shrink-0 border text-slate-400 hover:bg-green-50 hover:text-green-600 transition-colors"
+            onClick={handleDownload}
+            disabled={isDownloading || fotoCount === 0}
+            title="Descargar fotos"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
           </Button>
         </CardFooter>
       </Card>

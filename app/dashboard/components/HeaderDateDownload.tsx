@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -23,18 +23,8 @@ function formatDisplayDate(isoDate: string): string {
 
 export function HeaderDateDownload() {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   const today = getTodayISO();
-
-  // Simula carga inicial (puedes quitar el timeout si tienes data real)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800); // 0.8 segundos
-
-    return () => clearTimeout(timer);
-  }, []);
 
   async function handleDownload() {
     setIsDownloading(true);
@@ -72,40 +62,23 @@ export function HeaderDateDownload() {
     }
   }
 
-  // 🔹 Skeleton
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-3 animate-pulse">
-        <div className="h-7 w-24 bg-slate-200 rounded-full" />
-        <div className="h-9 w-9 bg-slate-200 rounded-lg" />
-      </div>
-    );
-  }
-
   // 🔹 Contenido real
   return (
-    <>
-      <Badge
-        variant="secondary"
-        className="hidden sm:inline-flex h-7 px-3 text-xs font-medium pointer-events-none rounded-full bg-white border-blue-50 text-center"
-      >
-        {formatDisplayDate(today)}
-      </Badge>
+    <Button
+      variant="outline"
+      className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all font-medium shadow-sm"
+      onClick={handleDownload}
+      disabled={isDownloading}
+      title={`Descargar datos del ${formatDisplayDate(today)}`}
+    >
+      <Calendar className="h-4 w-4 text-slate-500 group-hover:text-blue-500" />
+      <span>{formatDisplayDate(today)}</span>
 
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-9 w-9 rounded-lg hidden sm:flex bg-white hover:bg-green-100 hover:border-green-600"
-        onClick={handleDownload}
-        disabled={isDownloading}
-        title={`Descargar datos del ${formatDisplayDate(today)}`}
-      >
-        {isDownloading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        ) : (
-          <Download className="h-4 w-4 text-green-600" />
-        )}
-      </Button>
-    </>
+      {isDownloading ? (
+        <Loader2 className="h-4 w-4 animate-spin ml-2 text-slate-400" />
+      ) : (
+        <Download className="h-4 w-4 ml-2 text-slate-400" />
+      )}
+    </Button>
   );
 }

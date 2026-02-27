@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "../ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./logout-button";
-import { Badge } from "@/components/ui/badge";
+import { User } from "lucide-react";
 
 type UsuarioConRol = {
   nombres: string;
@@ -36,31 +36,33 @@ export async function AuthButton() {
   // 2️⃣ Traer usuario + rol (relación many-to-one)
   const { data: usuario } = await supabase
     .from("usuario")
-    .select(`
+    .select(
+      `
       nombres,
       apellidos,
       rol:rol_id (
         nombre
       )
-    `)
+    `,
+    )
     .eq("id", user.id)
     .single<UsuarioConRol>();
 
   return (
     <div className="flex items-center gap-4">
-      <Badge
-        variant="secondary"
-        className="h-9 w-40 pointer-events-none bg-slate-100 flex items-center justify-center"
-      >
-        <div className="flex flex-col text-sm text-center leading-tight">
-          <span>
-            {usuario?.nombres} {usuario?.apellidos}
+      <div className="flex items-center gap-3">
+        <div className="flex flex-col text-right">
+          <span className="text-[14px] font-semibold text-slate-900 leading-tight">
+            {usuario?.nombres} {usuario?.apellidos?.charAt(0)}.
           </span>
-          <span className="text-gray-500 text-xs">
-            Rol: {usuario?.rol?.nombre}
+          <span className="text-[12px] text-slate-500 font-medium">
+            {usuario?.rol?.nombre}
           </span>
         </div>
-      </Badge>
+        <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+          <User className="h-5 w-5 text-slate-500" />
+        </div>
+      </div>
 
       <LogoutButton />
     </div>

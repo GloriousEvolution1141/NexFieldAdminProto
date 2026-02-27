@@ -14,17 +14,17 @@ export function HeaderSearch() {
 
   return (
     <Field className="w-full">
-      <InputGroup className="bg-gray-100 focus-within:bg-background border-dashed border-muted-foreground/30 hover:bg-white transition-all duration-300">
+      <InputGroup className="bg-slate-100/80 hover:bg-slate-100 focus-within:bg-white border-transparent focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all rounded-full h-10">
+        <InputGroupAddon align="inline-start" className="pl-4">
+          <SearchIcon className="text-slate-400 h-[18px] w-[18px]" />
+        </InputGroupAddon>
         <InputGroupInput
           id="inline-start-input"
-          placeholder="Buscar registros..."
-          className="text-sm shadow-none"
+          placeholder="Buscar..."
+          className="text-[14px] text-slate-700 placeholder:text-slate-400 shadow-none bg-transparent border-none focus-visible:ring-0 px-2"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <InputGroupAddon align="inline-start">
-          <SearchIcon className="text-muted-foreground/70 h-4 w-4" />
-        </InputGroupAddon>
       </InputGroup>
     </Field>
   );

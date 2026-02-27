@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUsuarioById } from "@/lib/queries";
 import { SecretariasData } from "./components/tables/SecretariasData";
 import { TecnicosData } from "./components/tables/TecnicosData";
+import { LoadingOverlay } from "./components/LoadingOverlay";
 
 function UnderConstructionData() {
   return (
@@ -54,14 +55,7 @@ async function DashboardContent() {
 export default function DashboardPage() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ">
-      <Suspense
-        fallback={
-          <div className="mt-6 flex flex-col items-center justify-center p-12 border rounded-xl bg-card text-muted-foreground">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-            <p>Cargando panel de control...</p>
-          </div>
-        }
-      >
+      <Suspense fallback={<LoadingOverlay />}>
         <DashboardContent />
       </Suspense>
     </div>

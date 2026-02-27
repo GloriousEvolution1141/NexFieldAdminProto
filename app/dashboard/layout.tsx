@@ -16,64 +16,38 @@ export default function dashboardLayout({
   return (
     <Suspense>
       <SearchProvider>
-        <div className="relative min-h-screen flex flex-col bg-blue-300">
-          <header className="sticky top-0 z-50 w-full border-y-blue-500 shadow-md bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="h-16 grid grid-cols-3 items-center px-4 sm:px-8 max-w-8xl mx-auto w-full">
+        <div className="relative min-h-screen flex flex-col bg-slate-50">
+          <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white">
+            <div className="h-[72px] grid grid-cols-3 items-center px-6 md:px-10 max-w-[1600px] mx-auto w-full">
               {/* Zona izquierda */}
-              <div className="h-12 flex items-center justify-start gap-4 ">
-                <Link
-                  href="/dashboard"
-                  className="flex items-center gap-2 hover:bg-slate-200 rounded-md p-1 transition-colors"
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-primary/10 text-primary pointer-events-none"
-                  >
-                    <span className="font-bold text-sm">N</span>
-                  </Button>
-                  <div className="flex flex-col ">
-                    <h1 className="font-bold  leading-tight tracking-tight">
-                      NextField
-                    </h1>
-                    <p className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">
-                      Admin
-                    </p>
+              <div className="flex items-center justify-start gap-3">
+                <Link href="/dashboard" className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-md bg-blue-600 flex items-center justify-center shrink-0">
+                    <span className="font-bold text-white text-sm">N</span>
                   </div>
+                  <h1 className="font-bold text-xl text-slate-900 tracking-tight">
+                    NextField
+                  </h1>
                 </Link>
               </div>
 
               {/* Zona centro */}
-              <div className="h-12 flex justify-center items-center w-full max-w-md mx-auto">
+              <div className="flex justify-center items-center w-full max-w-xl mx-auto px-4">
                 <HeaderSearch />
               </div>
 
               {/* Zona derecha */}
-              <div className="h-12 flex justify-end items-center gap-4">
-                <Suspense
-                  fallback={
-                    <div className="hidden sm:flex gap-2">
-                      <div className="h-7 w-28 rounded-full bg-muted animate-pulse" />
-                      <div className="h-9 w-9 rounded-full bg-muted animate-pulse" />
-                    </div>
-                  }
-                >
-                  <HeaderDateDownload />
-                </Suspense>
-                <Suspense fallback={<AuthButtonSkeleton />}>
-                  <AuthButton />
-                </Suspense>
+              <div className="flex justify-end items-center gap-5">
+                <HeaderDateDownload />
+                <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+                <AuthButton />
               </div>
             </div>
           </header>
 
-          <main className="flex-1 flex flex-col max-w-8xl w-full px-24 py-6 bg-blue-50">
+          <main className="flex-1 flex flex-col max-w-[1600px] w-full mx-auto px-6 md:px-10 py-8 lg:py-10 bg-transparent">
             {children}
           </main>
-          {/* 
-          <footer className="fixed bottom-0 left-0 w-full flex items-center justify-center border-t text-center text-xs gap-8 py-4 bg-background z-50">
-            <ThemeSwitcher />
-          </footer> */}
         </div>
       </SearchProvider>
     </Suspense>

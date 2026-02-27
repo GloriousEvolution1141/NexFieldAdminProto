@@ -11,24 +11,18 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { SuministrosData } from "@/app/dashboard/components/tables/SuministrosData";
-
 import { getUsuarioById } from "@/lib/queries";
+import { SuministrosProvider } from "@/app/dashboard/components/grids/SuministrosContext";
+import { SuministrosHeader } from "@/app/dashboard/components/grids/SuministrosHeader";
+import { LoadingOverlay } from "@/app/dashboard/components/LoadingOverlay";
+import { Home } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ tecnicoId: string }>;
 }
 
-async function PageContent({
-  paramsPromise,
-}: {
-  paramsPromise: Promise<{ tecnicoId: string }>;
-}) {
-  const { tecnicoId } = await paramsPromise;
+async function TecnicoBreadcrumb({ tecnicoId }: { tecnicoId: string }) {
   const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) redirect("/auth/login");
-  const userId = userData.user.id;
-
   const { data: tecData } = await getUsuarioById(
     supabase,
     tecnicoId,
@@ -39,38 +33,51 @@ async function PageContent({
     : "Técnico";
 
   return (
-    <div className="space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/dashboard">Técnicos</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Técnico {tecnicoName}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-      <SuministrosData tecnicoId={tecnicoId} userId={userId} />
-    </div>
+    <Breadcrumb>
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink asChild>
+            <Link href="/dashboard" className="flex items-center gap-1.5">
+              <Home className="h-4 w-4" />
+              Técnicos
+            </Link>
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>Técnico {tecnicoName}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 }
 
-export default function TecnicoPage({ params }: PageProps) {
+async function SuministrosSection({ tecnicoId }: { tecnicoId: string }) {
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) redirect("/auth/login");
+  const userId = userData.user.id;
+
+  return <SuministrosData tecnicoId={tecnicoId} userId={userId} />;
+}
+
+export default async function TecnicoPage({ params }: PageProps) {
+  const { tecnicoId } = await params;
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) redirect("/auth/login");
+  const userId = userData.user.id;
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <Suspense
-        fallback={
-          <div className="mt-6 flex flex-col items-center justify-center p-12 border rounded-xl bg-card text-muted-foreground">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-            <p>Cargando suministros...</p>
-          </div>
-        }
-      >
-        <PageContent paramsPromise={params} />
-      </Suspense>
+    <div className="space-y-6">
+      <TecnicoBreadcrumb tecnicoId={tecnicoId} />
+
+      <SuministrosProvider>
+        <SuministrosHeader tecnicoId={tecnicoId} userId={userId} />
+        <Suspense fallback={<LoadingOverlay />}>
+          <SuministrosSection tecnicoId={tecnicoId} />
+        </Suspense>
+      </SuministrosProvider>
     </div>
   );
 }
