@@ -122,7 +122,7 @@ export function SuministrosGrid({
 
         {filtered.length === 0 && (
           <p className="col-span-full text-center text-sm text-muted-foreground py-10">
-            No se encontraron suministros para &ldquo;{q}&rdquo;.
+            No se encontraron suministros para este técnico.
           </p>
         )}
       </div>
@@ -382,7 +382,7 @@ function SuministroCard({
             {/* Right Column: Selected Photo Details */}
             <div className="w-full md:w-[40%] bg-white border-l border-slate-100 overflow-y-auto custom-scrollbar flex flex-col">
               {selectedFoto ? (
-                <div className="p-6 flex flex-col gap-6">
+                <div className="p-4 flex flex-col gap-4">
                   {/* Basic Info */}
                   <div className="space-y-1.5">
                     <h4 className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
@@ -395,7 +395,7 @@ function SuministroCard({
 
                   {/* Main Image View */}
                   <div
-                    className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-900 border border-slate-200 cursor-zoom-in group shadow-inner"
+                    className="relative w-full aspect-video max-h-48 lg:max-h-56 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 cursor-zoom-in group shadow-inner"
                     onClick={() => setMaxFoto(selectedFoto)}
                   >
                     {selectedFoto.direccion ? (
@@ -435,13 +435,13 @@ function SuministroCard({
                           : "_self"
                       }
                       rel="noopener noreferrer"
-                      className="block w-full h-28 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                      className="block w-full h-20 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                     >
                       {/* Decorative map background placeholder */}
-                      <div className="absolute inset-0 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=2&size=400x200&sensor=false')] bg-cover bg-center opacity-[0.15] group-hover:opacity-30 transition-opacity grayscale group-hover:grayscale-0" />
+                      <div className="absolute inset-0 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=2&size=400x160&sensor=false')] bg-cover bg-center opacity-[0.15] group-hover:opacity-30 transition-opacity grayscale group-hover:grayscale-0" />
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <div className="w-10 h-10 bg-blue-500 rounded-full shadow-lg flex items-center justify-center text-white mb-2 group-hover:-translate-y-1 transition-transform">
-                          <MapPin className="w-5 h-5" />
+                        <div className="w-8 h-8 bg-blue-500 rounded-full shadow-lg flex items-center justify-center text-white mb-1 group-hover:-translate-y-1 transition-transform">
+                          <MapPin className="w-4 h-4" />
                         </div>
                         <span className="text-xs font-semibold text-slate-700 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm">
                           {selectedFoto.latitud && selectedFoto.longitud
@@ -476,7 +476,7 @@ function SuministroCard({
                     <h4 className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">
                       Notas Técnicas
                     </h4>
-                    <div className="bg-blue-50/50 p-4 rounded-xl border-l-4 border-blue-500 text-sm text-slate-700">
+                    <div className="bg-blue-50/50 p-2.5 rounded-xl border-l-4 border-blue-500 text-sm text-slate-700">
                       {selectedFoto.nota ? (
                         <p className="italic">"{selectedFoto.nota}"</p>
                       ) : (
@@ -488,7 +488,7 @@ function SuministroCard({
                   </div>
 
                   {/* Meta Details */}
-                  <div className="mt-auto space-y-2.5 pt-5 border-t border-slate-100 text-xs text-slate-500">
+                  <div className="mt-auto space-y-2 pt-3 border-t border-slate-100 text-xs text-slate-500">
                     <div className="flex justify-between items-center">
                       <span className="font-medium">Fecha de subida</span>
                       <span className="text-slate-700">
