@@ -13,7 +13,7 @@ export async function SuministrosData({
   const { data: suministros, error } = await supabase
     .from("suministro")
     .select(
-      `id, nombre, estado, activo, created_at, fotos:fotos( id, nombre, direccion, created_at )`,
+      `id, nombre, estado, activo, created_at, fotos:fotos( id, nombre, direccion, created_at, latitud, longitud )`,
     )
     .eq("asignado_a", tecnicoId)
     .order("created_at", { ascending: false });

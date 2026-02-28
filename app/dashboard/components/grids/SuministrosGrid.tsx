@@ -22,13 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import {
   Eye,
   Package,
   Calendar,
@@ -36,6 +29,8 @@ import {
   CheckSquare,
   Download,
   Loader2,
+  MapPin,
+  Image as ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDateToLima, formatDateTimeToLima } from "@/lib/date-helpers";
@@ -45,6 +40,9 @@ interface Foto {
   nombre: string | null;
   direccion: string | null;
   created_at: string | null;
+  nota?: string | null;
+  latitud?: string | null;
+  longitud?: string | null;
 }
 
 interface Suministro {
@@ -160,6 +158,15 @@ function SuministroCard({
   const [open, setOpen] = useState(false);
   const [maxFoto, setMaxFoto] = useState<Foto | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedFoto, setSelectedFoto] = useState<Foto | null>(null);
+
+  useEffect(() => {
+    if (open && fotoCount > 0 && !selectedFoto) {
+      setSelectedFoto(s.fotos[0]);
+    } else if (!open) {
+      setTimeout(() => setSelectedFoto(null), 300); // clear after animation
+    }
+  }, [open, fotoCount, s.fotos, selectedFoto]);
 
   async function handleDownload(e: React.MouseEvent) {
     e.preventDefault();
@@ -294,63 +301,219 @@ function SuministroCard({
 
       {/* Dialog de fotos */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-200">
-          <DialogHeader>
-            <DialogTitle>Fotos de {s.nombre}</DialogTitle>
+        <DialogContent className="sm:max-w-6xl w-[95vw] h-[90vh] p-0 flex flex-col bg-white overflow-hidden gap-0 border-none shadow-2xl rounded-2xl">
+          {/* Main header spanning full width */}
+          <DialogHeader className="p-6 border-b border-slate-100 flex-shrink-0 bg-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold text-slate-900">
+                  {s.nombre}
+                </DialogTitle>
+                <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-blue-500" />{" "}
+                    {formatDateToLima(s.created_at)}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-blue-500" /> #
+                    {String(s.id).slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-4 px-8">
-            {fotoCount === 0 ? (
-              <p className="text-sm text-center text-muted-foreground py-6">
-                Este suministro no tiene fotos registradas.
-              </p>
-            ) : (
-              <Carousel className="w-full max-w-3xl mx-auto bg-slate-100 rounded-md">
-                <CarouselContent>
+
+          {/* Split Content Area */}
+          <div className="flex flex-1 overflow-hidden flex-col md:flex-row bg-slate-50/50">
+            {/* Left Column: Thumbnails */}
+            <div className="w-full md:w-[60%] p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                  <ImageIcon className="w-5 h-5 text-blue-500" />
+                  Evidencia de Campo ({fotoCount} Fotos)
+                </h3>
+              </div>
+
+              {fotoCount === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 border-2 border-dashed border-slate-200 rounded-xl">
+                  <ImageIcon className="w-12 h-12 mb-3 text-slate-300" />
+                  <p>Este suministro no tiene fotos registradas.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
                   {s.fotos.map((f) => (
-                    <CarouselItem key={f.id}>
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 rounded-md border p-4 bg-muted/30">
-                        <div className="flex flex-col gap-2 h-[350px] lg:col-span-2 ">
-                          <span className="font-semibold text-lg truncate ">
-                            {f.nombre || "Sin Título"}
-                          </span>
-                          <div className="w-full h-full bg-muted-foreground/10 rounded-md overflow-hidden flex items-center justify-center relative">
-                            {f.direccion ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={f.direccion}
-                                  alt={f.nombre || "Foto"}
-                                  className="absolute inset-0 w-full h-full object-contain bg-black/5 cursor-pointer hover:opacity-80  transition-opacity"
-                                  onClick={() => setMaxFoto(f)}
-                                  title="Clic para maximizar"
-                                />
-                              </>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                Sin URL de imagen
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDateTimeToLima(f.created_at)}
-                          </span>
+                    <div
+                      key={f.id}
+                      onClick={() => setSelectedFoto(f)}
+                      className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all duration-300 ${
+                        selectedFoto?.id === f.id
+                          ? "border-blue-500 shadow-md transform scale-[1.02]"
+                          : "border-transparent border-slate-200 hover:border-blue-300 hover:shadow-sm"
+                      }`}
+                    >
+                      {f.direccion ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={f.direccion}
+                          alt={f.nombre || "Foto"}
+                          className="w-full h-full object-cover bg-slate-200 transition-transform duration-500 hover:scale-110"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400">
+                          <ImageIcon className="w-8 h-8 opacity-40" />
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <h3 className="font-semibold text-foreground/80 border-b pb-2">
-                            Descripción y Notas
-                          </h3>
-                          <div className="flex-1 p-3 bg-background rounded-md border text-sm text-muted-foreground">
-                            <p>Sin descripción registrada.</p>
-                          </div>
+                      )}
+                      {selectedFoto?.id === f.id && (
+                        <div className="absolute top-2 right-2 bg-blue-500 text-white p-1 rounded-full shadow-sm animate-in zoom-in duration-200">
+                          <CheckSquare className="w-4 h-4" />
                         </div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-3 pt-8">
+                        <p className="text-white text-xs font-medium truncate drop-shadow-md">
+                          {f.nombre || "Sin Título"}
+                        </p>
                       </div>
-                    </CarouselItem>
+                    </div>
                   ))}
-                </CarouselContent>
-                <CarouselPrevious className="-left-6 md:-left-12" />
-                <CarouselNext className="-right-6 md:-right-12" />
-              </Carousel>
-            )}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Selected Photo Details */}
+            <div className="w-full md:w-[40%] bg-white border-l border-slate-100 overflow-y-auto custom-scrollbar flex flex-col">
+              {selectedFoto ? (
+                <div className="p-6 flex flex-col gap-6">
+                  {/* Basic Info */}
+                  <div className="space-y-1.5">
+                    <h4 className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+                      Foto Seleccionada
+                    </h4>
+                    <h3 className="text-lg font-bold text-slate-800 break-words leading-tight">
+                      {selectedFoto.nombre || "Sin Título"}
+                    </h3>
+                  </div>
+
+                  {/* Main Image View */}
+                  <div
+                    className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-900 border border-slate-200 cursor-zoom-in group shadow-inner"
+                    onClick={() => setMaxFoto(selectedFoto)}
+                  >
+                    {selectedFoto.direccion ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={selectedFoto.direccion}
+                        alt={selectedFoto.nombre || "Foto"}
+                        className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-500">
+                        Sin imagen
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white text-xs font-medium flex items-center justify-center gap-1">
+                        <Eye className="w-3.5 h-3.5" /> Clic para ampliar
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Geolocation Section */}
+                  <div className="space-y-3">
+                    <h4 className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+                      <MapPin className="w-3.5 h-3.5" /> Geolocalización
+                    </h4>
+
+                    <a
+                      href={
+                        selectedFoto.latitud && selectedFoto.longitud
+                          ? `https://www.google.com/maps?q=${selectedFoto.latitud},${selectedFoto.longitud}&ll=${selectedFoto.latitud},${selectedFoto.longitud}&z=17`
+                          : "#"
+                      }
+                      target={
+                        selectedFoto.latitud && selectedFoto.longitud
+                          ? "_blank"
+                          : "_self"
+                      }
+                      rel="noopener noreferrer"
+                      className="block w-full h-28 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                    >
+                      {/* Decorative map background placeholder */}
+                      <div className="absolute inset-0 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=2&size=400x200&sensor=false')] bg-cover bg-center opacity-[0.15] group-hover:opacity-30 transition-opacity grayscale group-hover:grayscale-0" />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <div className="w-10 h-10 bg-blue-500 rounded-full shadow-lg flex items-center justify-center text-white mb-2 group-hover:-translate-y-1 transition-transform">
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm">
+                          {selectedFoto.latitud && selectedFoto.longitud
+                            ? "Abrir en Google Maps"
+                            : "Ubicación no disponible"}
+                        </span>
+                      </div>
+                    </a>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span className="text-[9px] font-bold text-slate-400 tracking-wider uppercase block mb-0.5">
+                          Latitud
+                        </span>
+                        <span className="text-sm font-medium text-slate-700 font-mono">
+                          {selectedFoto.latitud || "No registrada"}
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span className="text-[9px] font-bold text-slate-400 tracking-wider uppercase block mb-0.5">
+                          Longitud
+                        </span>
+                        <span className="text-sm font-medium text-slate-700 font-mono">
+                          {selectedFoto.longitud || "No registrada"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Technical Notes Section */}
+                  <div className="space-y-2">
+                    <h4 className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">
+                      Notas Técnicas
+                    </h4>
+                    <div className="bg-blue-50/50 p-4 rounded-xl border-l-4 border-blue-500 text-sm text-slate-700">
+                      {selectedFoto.nota ? (
+                        <p className="italic">"{selectedFoto.nota}"</p>
+                      ) : (
+                        <span className="text-slate-400 italic">
+                          Sin notas registradas para esta evidencia.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta Details */}
+                  <div className="mt-auto space-y-2.5 pt-5 border-t border-slate-100 text-xs text-slate-500">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Fecha de subida</span>
+                      <span className="text-slate-700">
+                        {selectedFoto.created_at
+                          ? formatDateTimeToLima(selectedFoto.created_at)
+                          : "-"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-slate-50/30">
+                  <div className="w-16 h-16 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center mb-4">
+                    <ImageIcon className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <h3 className="font-medium text-slate-600 mb-1">
+                    Ninguna foto seleccionada
+                  </h3>
+                  <p className="text-sm">
+                    Selecciona una foto de la cuadrícula para ver sus detalles y
+                    ubicación
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
